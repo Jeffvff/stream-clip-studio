@@ -1,0 +1,84 @@
+# Stream Clip Studio
+
+Uma skill para Codex no Windows que conecta Gaming Clip, edição vertical e agendamento nativo no TikTok Studio.
+
+## Primeiro uso
+
+Instale Python 3.11+, Git para Windows e o GitHub CLI. Com acesso ao repositório, abra o PowerShell no projeto onde usa o Codex:
+
+```powershell
+gh auth login
+New-Item -ItemType Directory -Force .agents/skills | Out-Null
+gh repo clone Jeffvff/stream-clip-studio .agents/skills/stream-clip-studio
+```
+
+Abra um chat nesse workspace e peça **“Use stream-clip-studio para configurar meu perfil”**.
+
+Também dá para executar, dentro desta pasta:
+
+```powershell
+.\setup.ps1
+```
+
+O instalador coloca as dependências em uma venv, usa Chromium do Playwright e baixa Bun, Gaming Clip, FFmpeg, yt-dlp e o modelo do Whisper conforme necessário. A configuração pede **nome de exibição, foto, @ e pasta de mídia**. Em seguida abre o TikTok Studio para o login manual em um perfil dedicado. O Chromium fecha quando a tela de upload estiver pronta. A configuração não publica nada.
+
+Se você já tem o Gaming Clip instalado, use `.\setup.ps1 onboard --existing-engine 'C:\caminho\gaming-clip'`. Use `.\run.ps1 login` para renovar a sessão. `onboard --no-login` prepara as configurações sem abrir o navegador.
+
+As configurações pessoais e a sessão ficam em `%LOCALAPPDATA%\stream-clip-studio`. O perfil do Chromium, o SQLite, os logs e as capturas ficam na subpasta `tiktok`. Os originais e os MP4s ficam na pasta escolhida. Esses dados não fazem parte do repositório.
+
+## Do original ao MP4
+
+```powershell
+.\run.ps1 import 'https://www.youtube.com/watch?v=ID_DO_VIDEO'
+.\run.ps1 import 'C:\Videos\LIVE DIA 3.mp4'
+.\run.ps1 analyze 'D:\Clips\LIVE DIA 3.mp4' --lang pt --min 90 --max 120
+.\run.ps1 gaming show ID_DO_PROJETO
+.\run.ps1 gaming transcript ID_DO_PROJETO --from 1:30:00 --to 1:31:00
+.\run.ps1 render 'D:\Clips\LIVE DIA 3.mp4' --start 5400 --duration 60 --streamer '@streamer' --webcam '20,30,650,354' --title 'Era só um carinho' --cover-title 'ERA SÓ UM CARINHO' --cover-at 18
+```
+
+`--webcam` é o recorte em pixels da gravação. Quando a webcam estiver ausente, omita a opção. `--focus-x` ajusta o centro horizontal do jogo. `--cover-at` é relativo ao começo do corte. Para legendas dinâmicas, use `--words palavras.json` com uma lista cronológica de palavras, por exemplo:
+
+```json
+[{"text":"Olha","start":0.12,"end":0.42,"language":"pt"}]
+```
+
+A skill seleciona e revisa os intervalos e marca o idioma das falas para alimentar o renderer. O Whisper global não classifica sozinho cada fala do corte. O MP4 final tem webcam superior quando presente, gameplay ampliado, crédito do streamer, foto/nome/@ do perfil, marca do @ com 15% de opacidade e capa no primeiro frame. O renderer testa NVENC e cai para libx264 quando a GPU não está disponível. A transcrição usa o Whisper do Gaming Clip instalado.
+
+No quadro de 1080 × 1920, a foto e os créditos ficam dentro das margens laterais de 104 px à esquerda e 144 px à direita, com espaço acima do cabeçalho e abaixo do rodapé para a interface do celular. A marca central usa 78 px quando o @ couber nesse espaço.
+
+## TikTok Studio
+
+Edite o YAML local em `%LOCALAPPDATA%\stream-clip-studio\schedule.yaml`, ou copie-o como configuração de lote. Em `folder`, coloque **a subpasta de MP4s do original**, não a pasta que guarda as lives completas. Configure data, horários, fuso, privacidade, ordem, legendas e hashtags no YAML. Depois use:
+
+```powershell
+.\run.ps1 schedule plan --config 'C:\caminho\lote.yaml' --limit 3
+.\run.ps1 schedule run --approve HASH_DA_PREVIA
+.\run.ps1 schedule pending
+.\run.ps1 schedule report
+.\run.ps1 schedule reconcile --config 'C:\caminho\lote.yaml'
+```
+
+A aprovação é do lote exato. A confirmação exige evidência na lista do Studio. Se uma confirmação ficar incerta, a reconciliação consulta a lista sem reenviar.
+
+O fluxo usa a interface visível do TikTok Studio. Se a conta ou a versão do site mostrar controles diferentes, revise os seletores no YAML. A janela, o calendário e as permissões da conta são definidos pelo TikTok.
+
+## Dependências e publicação
+
+O Gaming Clip é baixado separadamente e tem licença AGPL-3.0 ([projeto de origem](https://github.com/iyansr/gaming-clip)). O pacote não inclui a sessão do TikTok, fontes do sistema, modelos baixados nem mídia. Publique somente o código e a documentação desta pasta. Escolha a licença do seu repositório antes de distribuí-lo.
+
+## Avisos de atualização
+
+A skill consulta a revisão mais recente da branch `main` no GitHub ao rodar a configuração ou um comando. Quando houver uma revisão nova, aparece um aviso com o link do commit. Cada publicação na `main` é detectada na próxima execução conectada. A checagem usa a sessão do GitHub CLI para acessar o repositório privado.
+
+```powershell
+.\run.ps1 check-update
+git pull --ff-only
+```
+
+A skill apenas avisa. Para atualizar uma cópia baixada como ZIP, substitua o código pela cópia mais recente. O perfil local, a sessão do TikTok e os vídeos ficam nas mesmas pastas.
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -X utf8 -m unittest discover -s scheduler/tests -v
+```
